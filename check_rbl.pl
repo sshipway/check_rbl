@@ -17,15 +17,18 @@
 #          1.4 - add the nixspam blacklist
 #          1.5 - set target=_new on links
 #                add emailreg.org
+#          1.6 - Add zabbix support (suppress HTML)
 
 use strict;
-my($VERSION) = "1.5";
+my($VERSION) = "1.6";
 my($IP,$PFX);
 my($MSG,$STATUS);
 my($DOM,$URL,$DESC);
 my($rv);
 
 my($DEBUG) = 0;
+
+my($MODE) = 0; # nagios
 
 ##############################################################################
 # Blacklists
@@ -87,9 +90,17 @@ sub checkdom($) {
 ##############################################################################
 # MAIN
 
+if($ARGV[0] and $ARGV[0] eq '-h') {
+	print "Usage: check_rbl [-z] ipaddress\n";
+	exit 3; # Unknown
+}
+if($ARGV[0] and $ARGV[0] eq '-z') {
+	$MODE=1; # zabbix
+	shift @ARGV;
+}
 shift @ARGV if($ARGV[0] and $ARGV[0] eq '-H');
 if(!$ARGV[0]) {
-	print "Usage: check_rbl ipaddress\n";
+	print "Usage: check_rbl [-z] ipaddress\n";
 	exit 3; # Unknown
 }
 if( $ARGV[0]=~/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/ ) {
@@ -120,10 +131,9 @@ foreach ( @BLACKLISTS ) {
 		$MSG .= $DESC;
 		$MSG .= "</A>" if($URL);
 		print "".localtime()." FOUND\n" if($DEBUG);
-#	}elsif($rv==2) { # Use this if you want brownlists - unreliable with sorbs
 	}elsif($rv>1) {  # use this normally
 		$MSG .= "<BR>" if($MSG);
-		$MSG .= "Listed on ";
+		$MSG .= "LISTED on ";
 		$MSG .= "<A HREF=\"$URL\" TARGET=\"_new\" >" if($URL);
 		$MSG .= $DESC;
 		$MSG .= "</A>" if($URL);
@@ -131,7 +141,7 @@ foreach ( @BLACKLISTS ) {
 		print "".localtime()." FOUND\n" if($DEBUG);
 	} elsif($rv) {
 		$MSG .= "<BR>" if($MSG);
-		$MSG .= "Listed on ";
+		$MSG .= "LISTED on ";
 		$MSG .= "<A HREF=\"$URL\" TARGET=\"_new\" >" if($URL);
 		$MSG .= $DESC;
 		$MSG .= "</A>" if($URL);
@@ -152,8 +162,15 @@ if(!$MSG) {
 	}
 	$MSG = "All OK: $MSG";
 }
-$MSG .= " <BR><A HREF=\"http://www.blacklistalert.org/?q=$IP\" TARGET=\"_new\" >Check blacklists</A>";
-$MSG .= "<BR>check_rbl version $VERSION";
+if(!$MODE) {
+	$MSG .= " <BR><A HREF=\"http://www.blacklistalert.org/?q=$IP\" TARGET=\"_new\" >Check blacklists</A>";
+	$MSG .= "<BR>check_rbl version $VERSION";
+} else {
+	$MSG =~ s/<BR\/?>/\n/gi;
+	$MSG =~ s/<A HREF="([^"]+)"[^>]+>([^<]+)<\/A>/$2 ($1)/g;
+	$MSG =~ s/<[^>]*>//g;
+	$MSG .= "\ncheck_rbl version $VERSION";
+}
 
 print "$MSG\n";
 exit $STATUS;
